@@ -3,6 +3,7 @@
 build:
   dependencies:
     before:
+      - 'printf "\n" | pecl install swoole'
       - 'composer self-update'
       - 'composer update --prefer-stable --prefer-source --no-interaction --no-progress --no-suggest'
   cache:
@@ -16,7 +17,7 @@ build:
         override: [php-scrutinizer-run]
 
 filter:
-  paths: [bin/*, src/*]
+  paths: [src/*]
   excluded_paths: [tests/*, vendor/*]
 
 coding_style:
@@ -40,7 +41,7 @@ tools:
     config:
       standard: 'PSR2'
     filter:
-      paths: [bin/*, src/*, tests/*]
+      paths: [src/*, tests/*]
   php_mess_detector:
     enabled: true
     config:
