@@ -68,19 +68,27 @@ class SwooleResponseFactoryTest extends TestCase
     public function testCookies(): void
     {
         $psrResponse = (new ResponseFactory())->createResponse();
-        $psrResponse = FigResponseCookies::set(
-            $psrResponse,
-            SetCookie::create('sessionId')
-                ->withValue('123456')
-                ->withSecure(true)
-                ->withHttpOnly(true)
-                ->withSameSite(SameSite::lax())
-        );
+
+        $cookie = SetCookie::create('sessionId')
+            ->withValue('123456')
+            ->withSecure(true)
+            ->withHttpOnly(true);
+        if (\class_exists('\Dflydev\FigCookies\Modifier\SameSite')) {
+            $cookie = $cookie->withSameSite(SameSite::lax());
+        }
+
+        $psrResponse = FigResponseCookies::set($psrResponse, $cookie);
 
         $swooleResponse = $this->getMockBuilder(SwooleResponse::class)->disableOriginalConstructor()->getMock();
-        $swooleResponse->expects(self::once())
-            ->method('cookie')
-            ->with('sessionId', '123456', 0, '/', '', true, true, 'Lax');
+        if (\class_exists('\Dflydev\FigCookies\Modifier\SameSite')) {
+            $swooleResponse->expects(self::once())
+                ->method('cookie')
+                ->with('sessionId', '123456', 0, '/', '', true, true, 'Lax');
+        } else {
+            $swooleResponse->expects(self::once())
+                ->method('cookie')
+                ->with('sessionId', '123456', 0, '/', '', true, true);
+        }
 
         $this->responseFactory->fromPsrResponse($psrResponse, $swooleResponse);
     }
