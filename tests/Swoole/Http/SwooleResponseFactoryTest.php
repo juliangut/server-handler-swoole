@@ -47,7 +47,7 @@ class SwooleResponseFactoryTest extends TestCase
             ->with(200, 'OK');
         $swooleResponse->expects(self::atLeastOnce())
             ->method('write')
-            ->with('Body content');
+            ->withConsecutive(['Body content'], ['']);
 
         $this->responseFactory->fromPsrResponse($psrResponse, $swooleResponse);
     }
