@@ -45,7 +45,7 @@ class SwooleResponseFactoryTest extends TestCase
         $swooleResponse->expects(self::once())
             ->method('setStatusCode')
             ->with(200, 'OK');
-        $swooleResponse->expects(self::once())
+        $swooleResponse->expects(self::atLeastOnce())
             ->method('write')
             ->with('Body content');
 
