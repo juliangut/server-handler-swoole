@@ -70,6 +70,12 @@ final class SwooleResponseFactory implements SwooleResponseFactoryInterface
      */
     private function getSameSitePolicy(SetCookie $cookie): ?string
     {
+        if (!\class_exists('\Dflydev\FigCookies\Modifier\SameSite')) {
+            // @codeCoverageIgnoreStart
+            return null;
+            // @codeCoverageIgnoreEnd
+        }
+
         $sameSite = $cookie->getSameSite();
 
         return $sameSite !== null ? \str_replace('SameSite=', '', $sameSite->asString()) : null;
