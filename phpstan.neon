@@ -1,0 +1,9 @@
+parameters:
+  level: max
+  paths:
+    - src
+  ignoreErrors:
+    - message: '/^In method "Jgut\\ServerHandler\\Swoole\\Server::onRequest", caught "Throwable" must be rethrown\./'
+      path: src/Server.php
+    - message: '/^Parameter #(4|5) \$(filename|lineno) of class ErrorException constructor expects (string|int), (string|int)\|null given\.$/'
+      path: src/Server.php
