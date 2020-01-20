@@ -19,7 +19,7 @@ use Psr\Http\Server\RequestHandlerInterface;
 use Psr\Log\LoggerAwareTrait;
 use Swoole\Http\Request as SwooleRequest;
 use Swoole\Http\Response as SwooleResponse;
-use Swoole\Http\Server as SwooleServer;
+use Swoole\Server as SwooleServer;
 
 class Server
 {
@@ -28,7 +28,7 @@ class Server
     /**
      * @var SwooleServer
      */
-    private $httpServer;
+    private $server;
 
     /**
      * @var RequestHandlerInterface
@@ -58,20 +58,20 @@ class Server
     /**
      * Server constructor.
      *
-     * @param SwooleServer                   $httpServer
+     * @param SwooleServer                   $server
      * @param RequestHandlerInterface        $requestHandler
      * @param PsrRequestFactoryInterface     $requestFactory
      * @param SwooleResponseFactoryInterface $responseFactory
      * @param bool                           $debug
      */
     public function __construct(
-        SwooleServer $httpServer,
+        SwooleServer $server,
         RequestHandlerInterface $requestHandler,
         PsrRequestFactoryInterface $requestFactory,
         SwooleResponseFactoryInterface $responseFactory,
         bool $debug = false
     ) {
-        $this->httpServer = $httpServer;
+        $this->server = $server;
         $this->requestHandler = $requestHandler;
         $this->requestFactory = $requestFactory;
         $this->responseFactory = $responseFactory;
@@ -86,14 +86,14 @@ class Server
         $cwd = \getcwd();
         $this->cwd = $cwd !== false ? $cwd : '-';
 
-        $this->httpServer->on('start', [$this, 'onStart']);
-        $this->httpServer->on('workerstart', [$this, 'onWorkerStart']);
-        $this->httpServer->on('request', [$this, 'onRequest']);
-        $this->httpServer->on('shutdown', [$this, 'onShutdown']);
+        $this->server->on('start', [$this, 'onStart']);
+        $this->server->on('workerstart', [$this, 'onWorkerStart']);
+        $this->server->on('request', [$this, 'onRequest']);
+        $this->server->on('shutdown', [$this, 'onShutdown']);
 
         \set_error_handler([$this, 'handleError']);
 
-        $this->httpServer->start();
+        $this->server->start();
     }
 
     /**
