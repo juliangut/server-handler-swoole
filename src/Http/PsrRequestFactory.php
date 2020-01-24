@@ -202,10 +202,10 @@ final class PsrRequestFactory implements PsrRequestFactoryInterface
 
         if (!isset($server['SERVER_ADDR']) || \preg_match('/^\[[0-9a-fA-F\:]+\]$/', $host) === false
         ) {
-            return [$host, $port];
+            return [$host, (string) $port];
         }
 
-        return $parseIpv6String($server['SERVER_ADDR'], $port);
+        return $parseIpv6String($server['SERVER_ADDR'], (string) $port);
     }
 
     /**

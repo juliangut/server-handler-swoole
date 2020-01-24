@@ -62,6 +62,19 @@ class PsrRequestFactoryTest extends TestCase
         self::assertEquals('', (string) $psrRequest->getBody());
     }
 
+    public function testProtocolVersion(): void
+    {
+        $swooleRequest = $this->getMockBuilder(SwooleRequest::class)->disableOriginalConstructor()->getMock();
+        $swooleRequest->expects(self::once())
+            ->method('rawContent')
+            ->willReturn('');
+        $swooleRequest->server = ['SERVER_PROTOCOL' => '1.0'];
+
+        $psrRequest = $this->requestFactory->fromSwooleRequest($swooleRequest);
+
+        self::assertEquals('1.0', $psrRequest->getProtocolVersion());
+    }
+
     public function testMethod(): void
     {
         $swooleRequest = $this->getMockBuilder(SwooleRequest::class)->disableOriginalConstructor()->getMock();
@@ -75,17 +88,83 @@ class PsrRequestFactoryTest extends TestCase
         self::assertEquals('POST', $psrRequest->getMethod());
     }
 
-    public function testProtocolVersion(): void
+    public function testUriHttps(): void
     {
         $swooleRequest = $this->getMockBuilder(SwooleRequest::class)->disableOriginalConstructor()->getMock();
         $swooleRequest->expects(self::once())
             ->method('rawContent')
             ->willReturn('');
-        $swooleRequest->server = ['SERVER_PROTOCOL' => '1.0'];
+        $swooleRequest->server = [
+            'HTTPS' => 'on',
+            'HTTP_HOST' => 'example.com',
+        ];
 
         $psrRequest = $this->requestFactory->fromSwooleRequest($swooleRequest);
 
-        self::assertEquals('1.0', $psrRequest->getProtocolVersion());
+        self::assertEquals('https://example.com/', (string) $psrRequest->getUri());
+    }
+
+    public function testUriHostAndPort(): void
+    {
+        $swooleRequest = $this->getMockBuilder(SwooleRequest::class)->disableOriginalConstructor()->getMock();
+        $swooleRequest->expects(self::once())
+            ->method('rawContent')
+            ->willReturn('');
+        $swooleRequest->header = ['HOST' => 'example.com:8080'];
+
+        $psrRequest = $this->requestFactory->fromSwooleRequest($swooleRequest);
+
+        self::assertEquals('http://example.com:8080/', (string) $psrRequest->getUri());
+    }
+
+    public function testUriServerNameAndPort(): void
+    {
+        $swooleRequest = $this->getMockBuilder(SwooleRequest::class)->disableOriginalConstructor()->getMock();
+        $swooleRequest->expects(self::once())
+            ->method('rawContent')
+            ->willReturn('');
+        $swooleRequest->server = [
+            'SERVER_NAME' => 'example.com',
+            'SERVER_PORT' => 8080,
+        ];
+
+        $psrRequest = $this->requestFactory->fromSwooleRequest($swooleRequest);
+
+        self::assertEquals('http://example.com:8080/', (string) $psrRequest->getUri());
+    }
+
+    public function testUriIPV6(): void
+    {
+        $swooleRequest = $this->getMockBuilder(SwooleRequest::class)->disableOriginalConstructor()->getMock();
+        $swooleRequest->expects(self::once())
+            ->method('rawContent')
+            ->willReturn('');
+        $swooleRequest->server = [
+            'SERVER_NAME' => '2001:0db8:0000:0000:0000:ff00:0042:8329',
+            'SERVER_PORT' => 8080,
+            'SERVER_ADDR' => '2001:0db8:0000:0000:0000:ff00:0042:8329:8080',
+        ];
+
+        $psrRequest = $this->requestFactory->fromSwooleRequest($swooleRequest);
+
+        self::assertEquals('http://[2001:0db8:0000:0000:0000:ff00:0042:8329:8080]/', (string) $psrRequest->getUri());
+    }
+
+    public function testUriPathAndQuerystring(): void
+    {
+        $swooleRequest = $this->getMockBuilder(SwooleRequest::class)->disableOriginalConstructor()->getMock();
+        $swooleRequest->expects(self::once())
+            ->method('rawContent')
+            ->willReturn('');
+        $swooleRequest->server = [
+            'HTTP_HOST' => 'example.com',
+            'REQUEST_URI' => '/path#segment',
+            'QUERY_STRING' => 'key=value',
+        ];
+
+        $psrRequest = $this->requestFactory->fromSwooleRequest($swooleRequest);
+
+        self::assertEquals('http://example.com/path?key=value#segment', (string) $psrRequest->getUri());
     }
 
     public function testHeaders(): void
@@ -137,7 +216,9 @@ class PsrRequestFactoryTest extends TestCase
             ->method('rawContent')
             ->willReturn('');
         $swooleRequest->files = [
-            'picture' => ['tmp_name' => 'tmpFile', 'size' => 100, 'error' => 0, 'name' => 'picture.jpg'],
+            'picture' => [
+                ['tmp_name' => 'tmpFile', 'size' => 100, 'error' => 0, 'name' => 'picture.jpg'],
+            ],
         ];
 
         $psrRequest = $this->requestFactory->fromSwooleRequest($swooleRequest);
@@ -145,10 +226,10 @@ class PsrRequestFactoryTest extends TestCase
         self::assertCount(1, $psrRequest->getUploadedFiles());
         /** @var UploadedFileInterface $file */
         $uploadedFile = $psrRequest->getUploadedFiles()['picture'];
-        self::assertEquals('picture.jpg', $uploadedFile->getClientFilename());
+        self::assertEquals('picture.jpg', $uploadedFile[0]->getClientFilename());
     }
 
-    public function testBodyProtocolVersion(): void
+    public function testBody(): void
     {
         $swooleRequest = $this->getMockBuilder(SwooleRequest::class)->disableOriginalConstructor()->getMock();
         $swooleRequest->expects(self::once())
