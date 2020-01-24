@@ -54,8 +54,10 @@ final class SwooleResponseFactory implements SwooleResponseFactoryInterface
             $body->rewind();
         }
 
-        while (!$body->eof()) {
-            $swooleResponse->write($body->read(self::CHUNK_SIZE));
+        while ($chunk = $body->read(self::CHUNK_SIZE)) {
+            if ($chunk !== '') {
+                $swooleResponse->write($chunk);
+            }
         }
 
         return $swooleResponse;

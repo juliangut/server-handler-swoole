@@ -44,9 +44,8 @@ class SwooleResponseFactoryTest extends TestCase
         $swooleResponse->expects(self::once())
             ->method('setStatusCode')
             ->with(200, 'OK');
-        $swooleResponse->expects(self::once())
-            ->method('write')
-            ->with('');
+        $swooleResponse->expects(self::never())
+            ->method('write');
 
         $this->responseFactory->fromPsrResponse($psrResponse, $swooleResponse);
     }
@@ -100,7 +99,7 @@ class SwooleResponseFactoryTest extends TestCase
         $swooleResponse = $this->getMockBuilder(SwooleResponse::class)->disableOriginalConstructor()->getMock();
         $swooleResponse->expects(self::atLeastOnce())
             ->method('write')
-            ->withConsecutive(['Body content'], ['']);
+            ->with('Body content');
 
         $this->responseFactory->fromPsrResponse($psrResponse, $swooleResponse);
     }
