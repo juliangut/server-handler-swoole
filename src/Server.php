@@ -25,6 +25,8 @@ class Server
 {
     use LoggerAwareTrait;
 
+    private const DEFAULT_PROCESS_NAME = 'swoole-server';
+
     /**
      * @var SwooleServer
      */
@@ -46,6 +48,11 @@ class Server
     private $responseFactory;
 
     /**
+     * @var string
+     */
+    private $processName;
+
+    /**
      * @var bool
      */
     private $debug;
@@ -53,7 +60,7 @@ class Server
     /**
      * @var string
      */
-    protected $cwd;
+    private $cwd;
 
     /**
      * Server constructor.
@@ -62,6 +69,7 @@ class Server
      * @param RequestHandlerInterface        $requestHandler
      * @param PsrRequestFactoryInterface     $requestFactory
      * @param SwooleResponseFactoryInterface $responseFactory
+     * @param string|null                    $processName
      * @param bool                           $debug
      */
     public function __construct(
@@ -69,12 +77,14 @@ class Server
         RequestHandlerInterface $requestHandler,
         PsrRequestFactoryInterface $requestFactory,
         SwooleResponseFactoryInterface $responseFactory,
+        ?string $processName = null,
         bool $debug = false
     ) {
         $this->server = $server;
         $this->requestHandler = $requestHandler;
         $this->requestFactory = $requestFactory;
         $this->responseFactory = $responseFactory;
+        $this->processName = $processName ?? self::DEFAULT_PROCESS_NAME;
         $this->debug = $debug;
     }
 
@@ -103,6 +113,9 @@ class Server
      */
     public function onStart(SwooleServer $server): void
     {
+        $mode = $server->manager_pid !== 0 ? 'process' : 'base';
+        $this->setProcessName($this->processName . '-master-' . $mode);
+
         $this->log(\sprintf('Swoole HTTP server is running in %s at %s:%d', $this->cwd, $server->host, $server->port));
     }
 
@@ -114,6 +127,11 @@ class Server
      */
     public function onWorkerStart(SwooleServer $server, int $workerId): void
     {
+        $processName = $workerId >= ($server->setting['worker_num'] ?? 1)
+            ? $this->processName . '-task-' . $workerId
+            : $this->processName . '-worker-' . $workerId;
+        $this->setProcessName($processName);
+
         $this->log(\sprintf(
             'Swoole HTTP worker started in %s with PID %d, for server running at %s:%d',
             $this->cwd,
@@ -233,6 +251,18 @@ TRACE;
         } while ($exception = $exception->getPrevious());
 
         return $message;
+    }
+
+    /**
+     * Set running process name.
+     *
+     * @param string $name
+     */
+    private function setProcessName(string $name): void
+    {
+        if (\PHP_OS !== 'Darwin') {
+            \swoole_set_process_name($name);
+        }
     }
 
     /**
