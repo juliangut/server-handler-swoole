@@ -7,3 +7,5 @@ parameters:
       path: src/Server.php
     - message: '/^Parameter #(4|5) \$(filename|lineno) of class ErrorException constructor expects (string|int), (string|int)\|null given\.$/'
       path: src/Server.php
+    - message: '/^Internal error: Internal error: Expected to find an ancestor with class name Swoole\\Timer on Swoole\\Server, but none was found\.\nRun PHPStan with --debug option and post the stack trace to:\nhttps:\/\/github\.com\/phpstan\/phpstan\/issues\/new$/'
+      path: src/Reloader/InotifyFileReloader.php

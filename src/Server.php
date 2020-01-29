@@ -15,6 +15,7 @@ namespace Jgut\ServerHandler\Swoole;
 
 use Jgut\ServerHandler\Swoole\Http\PsrRequestFactoryInterface;
 use Jgut\ServerHandler\Swoole\Http\SwooleResponseFactoryInterface;
+use Jgut\ServerHandler\Swoole\Reloader\ReloaderInterface;
 use Psr\Http\Server\RequestHandlerInterface;
 use Psr\Log\LoggerAwareTrait;
 use Swoole\Http\Request as SwooleRequest;
@@ -48,6 +49,11 @@ class Server
     private $responseFactory;
 
     /**
+     * @var ReloaderInterface|null
+     */
+    private $reloader;
+
+    /**
      * @var string
      */
     private $processName;
@@ -69,6 +75,7 @@ class Server
      * @param RequestHandlerInterface        $requestHandler
      * @param PsrRequestFactoryInterface     $requestFactory
      * @param SwooleResponseFactoryInterface $responseFactory
+     * @param ReloaderInterface|null         $reloader
      * @param string|null                    $processName
      * @param bool                           $debug
      */
@@ -77,6 +84,7 @@ class Server
         RequestHandlerInterface $requestHandler,
         PsrRequestFactoryInterface $requestFactory,
         SwooleResponseFactoryInterface $responseFactory,
+        ?ReloaderInterface $reloader = null,
         ?string $processName = null,
         bool $debug = false
     ) {
@@ -84,6 +92,7 @@ class Server
         $this->requestHandler = $requestHandler;
         $this->requestFactory = $requestFactory;
         $this->responseFactory = $responseFactory;
+        $this->reloader = $reloader;
         $this->processName = $processName ?? self::DEFAULT_PROCESS_NAME;
         $this->debug = $debug;
     }
@@ -131,6 +140,10 @@ class Server
             ? $this->processName . '-task-' . $workerId
             : $this->processName . '-worker-' . $workerId;
         $this->setProcessName($processName);
+
+        if ($this->reloader !== null && $workerId === 0) {
+            $this->reloader->register($server);
+        }
 
         $this->log(\sprintf(
             'Swoole HTTP worker started in %s with PID %d, for server running at %s:%d',

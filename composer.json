@@ -50,6 +50,7 @@
     "thecodingmachine/phpstan-strict-rules": "^0.12"
   },
   "suggest": {
+    "ext-inotify": "In order to use server reloading based on inotify file watcher."
   },
   "autoload": {
     "psr-4": {
