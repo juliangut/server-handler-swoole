@@ -69,24 +69,21 @@ class InotifyFileReloader implements ReloaderInterface
      */
     public function register(SwooleServer $server): void
     {
-        /** @var callable $callable */
-        $callable = [$this, 'onTick'];
+        $tickHandler = \Closure::fromCallable(function () use ($server): void {
+            $this->onTick($server);
+        })->bindTo($this);
 
-        $server->tick($this->interval, $callable, $server);
+        $server->tick($this->interval, $tickHandler, $server);
     }
 
     /**
      * On tick event handler.
      *
-     * @param int          $timerId
      * @param SwooleServer $server
-     *
-     * @SuppressWarnings(PHPMD.UnusedPrivateMethod)
-     * @SuppressWarnings(PHPMD.UnusedFormalParameter)
      */
-    private function onTick(int $timerId, SwooleServer $server): void
+    private function onTick(SwooleServer $server): void
     {
-        if ($this->haveChangedFiles()) {
+        if ($this->filesHaveChange()) {
             $this->log('Reloading due to file changes');
 
             $server->reload();
@@ -98,7 +95,7 @@ class InotifyFileReloader implements ReloaderInterface
      *
      * @return bool
      */
-    private function haveChangedFiles(): bool
+    private function filesHaveChange(): bool
     {
         $events = \inotify_read($this->inotify);
 
