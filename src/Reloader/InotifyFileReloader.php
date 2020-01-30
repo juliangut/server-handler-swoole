@@ -97,14 +97,13 @@ class InotifyFileReloader implements ReloaderInterface
      */
     private function filesHaveChange(): bool
     {
+        foreach (\array_diff(\get_included_files(), $this->watchedFiles) as $filePath) {
+            $descriptor = \inotify_add_watch($this->inotify, $filePath, \IN_MODIFY);
+            $this->watchedFiles[$descriptor] = $filePath;
+        }
+
         $events = \inotify_read($this->inotify);
-
         if (\is_array($events)) {
-            foreach (\array_diff(\get_included_files(), $this->watchedFiles) as $filePath) {
-                $descriptor = \inotify_add_watch($this->inotify, $filePath, \IN_MODIFY);
-                $this->watchedFiles[$descriptor] = $filePath;
-            }
-
             $reducer = \Closure::fromCallable(function (bool $modified, array $event): bool {
                 $descriptor = $event['wd'] ?? null;
 
