@@ -69,6 +69,28 @@ class Server
     private $cwd;
 
     /**
+     * List of server events.
+     *
+     * @var string[]
+     */
+    protected $serverEvents = [
+        'start',
+        'shutDown',
+        'managerStart',
+        'managerStop',
+        'workerStart',
+        'workerStop',
+        'workerError',
+        'request',
+        'packet',
+        'bufferFull',
+        'bufferEmpty',
+        'task',
+        'finish',
+        'pipeMessage',
+    ];
+
+    /**
      * Server constructor.
      *
      * @param SwooleServer                   $server
@@ -105,10 +127,16 @@ class Server
         $cwd = \getcwd();
         $this->cwd = $cwd !== false ? $cwd : '-';
 
-        $this->server->on('start', [$this, 'onStart']);
-        $this->server->on('workerstart', [$this, 'onWorkerStart']);
-        $this->server->on('request', [$this, 'onRequest']);
-        $this->server->on('shutdown', [$this, 'onShutdown']);
+        foreach ($this->serverEvents as $event) {
+            $method = 'on' . \ucfirst($event);
+
+            if (\method_exists($this, $method)) {
+                /** @var callable $callable */
+                $callable = [$this, $method];
+
+                $this->server->on($event, $callable);
+            }
+        }
 
         \set_error_handler([$this, 'handleError']);
 
@@ -125,7 +153,20 @@ class Server
         $mode = $server->manager_pid !== 0 ? 'process' : 'base';
         $this->setProcessName($this->processName . '-master-' . $mode);
 
-        $this->log(\sprintf('Swoole HTTP server is running in %s at %s:%d', $this->cwd, $server->host, $server->port));
+        $this->log(\sprintf('Swoole server is running in %s at %s:%d', $this->cwd, $server->host, $server->port));
+    }
+
+    /**
+     * On manager start callback.
+     *
+     * @param SwooleServer $server
+     */
+    public function onManagerStart(SwooleServer $server): void
+    {
+        $mode = $server->manager_pid !== 0 ? 'process' : 'base';
+        $this->setProcessName($this->processName . '-manager-' . $mode);
+
+        $this->log(\sprintf('Swoole manager in %s at %s:%d', $this->cwd, $server->host, $server->port));
     }
 
     /**
@@ -136,19 +177,19 @@ class Server
      */
     public function onWorkerStart(SwooleServer $server, int $workerId): void
     {
-        $processName = $workerId >= ($server->setting['worker_num'] ?? 1)
-            ? $this->processName . '-task-' . $workerId
-            : $this->processName . '-worker-' . $workerId;
-        $this->setProcessName($processName);
+        $this->setProcessName(
+            \sprintf('%s-%s-%s', $this->processName, $server->taskworker ? 'task' : 'worker', $workerId)
+        );
 
         if ($this->reloader !== null && $workerId === 0) {
             $this->reloader->register($server);
         }
 
         $this->log(\sprintf(
-            'Swoole HTTP worker started in %s with PID %d, for server running at %s:%d',
-            $this->cwd,
+            'Swoole %s with ID "%s" started in %s, for server running at %s:%d',
+            $server->taskworker ? 'task' : 'worker',
             $workerId,
+            $this->cwd,
             $server->host,
             $server->port
         ));
@@ -187,7 +228,7 @@ class Server
             \chdir($this->cwd);
         }
 
-        $this->log(\sprintf('Swoole HTTP server running at %s:%d has shut down', $server->host, $server->port));
+        $this->log(\sprintf('Swoole server running at %s:%d has shut down', $server->host, $server->port));
     }
 
     /**
