@@ -20,7 +20,7 @@ use Psr\Http\Server\RequestHandlerInterface;
 use Psr\Log\LoggerAwareTrait;
 use Swoole\Http\Request as SwooleRequest;
 use Swoole\Http\Response as SwooleResponse;
-use Swoole\Server as SwooleServer;
+use Swoole\Http\Server as SwooleHttpServer;
 
 class Server
 {
@@ -29,9 +29,9 @@ class Server
     private const DEFAULT_PROCESS_NAME = 'swoole-server';
 
     /**
-     * @var SwooleServer
+     * @var SwooleHttpServer
      */
-    private $server;
+    private $httpServer;
 
     /**
      * @var RequestHandlerInterface
@@ -93,30 +93,37 @@ class Server
     /**
      * Server constructor.
      *
-     * @param SwooleServer                   $server
+     * @param SwooleHttpServer               $httpServer
      * @param RequestHandlerInterface        $requestHandler
      * @param PsrRequestFactoryInterface     $requestFactory
      * @param SwooleResponseFactoryInterface $responseFactory
-     * @param ReloaderInterface|null         $reloader
      * @param string|null                    $processName
      * @param bool                           $debug
      */
     public function __construct(
-        SwooleServer $server,
+        SwooleHttpServer $httpServer,
         RequestHandlerInterface $requestHandler,
         PsrRequestFactoryInterface $requestFactory,
         SwooleResponseFactoryInterface $responseFactory,
-        ?ReloaderInterface $reloader = null,
         ?string $processName = null,
         bool $debug = false
     ) {
-        $this->server = $server;
+        $this->httpServer = $httpServer;
         $this->requestHandler = $requestHandler;
         $this->requestFactory = $requestFactory;
         $this->responseFactory = $responseFactory;
-        $this->reloader = $reloader;
         $this->processName = $processName ?? self::DEFAULT_PROCESS_NAME;
         $this->debug = $debug;
+    }
+
+    /**
+     * Set server reloader.
+     *
+     * @param ReloaderInterface $reloader
+     */
+    public function setReloader(ReloaderInterface $reloader): void
+    {
+        $this->reloader = $reloader;
     }
 
     /**
@@ -134,64 +141,68 @@ class Server
                 /** @var callable $callable */
                 $callable = [$this, $method];
 
-                $this->server->on($event, $callable);
+                $this->httpServer->on($event, $callable);
             }
         }
 
         \set_error_handler([$this, 'handleError']);
 
-        $this->server->start();
+        $this->httpServer->start();
     }
 
     /**
      * On server start callback.
      *
-     * @param SwooleServer $server
+     * @param SwooleHttpServer $httpServer
      */
-    public function onStart(SwooleServer $server): void
+    public function onStart(SwooleHttpServer $httpServer): void
     {
-        $mode = $server->manager_pid !== 0 ? 'process' : 'base';
+        $mode = $httpServer->manager_pid !== 0 ? 'process' : 'base';
         $this->setProcessName($this->processName . '-master-' . $mode);
 
-        $this->log(\sprintf('Swoole server is running in %s at %s:%d', $this->cwd, $server->host, $server->port));
+        $this->log(
+            \sprintf('Swoole HTTPS server is running in %s at %s:%d', $this->cwd, $httpServer->host, $httpServer->port)
+        );
     }
 
     /**
      * On manager start callback.
      *
-     * @param SwooleServer $server
+     * @param SwooleHttpServer $httpServer
      */
-    public function onManagerStart(SwooleServer $server): void
+    public function onManagerStart(SwooleHttpServer $httpServer): void
     {
-        $mode = $server->manager_pid !== 0 ? 'process' : 'base';
+        $mode = $httpServer->manager_pid !== 0 ? 'process' : 'base';
         $this->setProcessName($this->processName . '-manager-' . $mode);
 
-        $this->log(\sprintf('Swoole manager in %s at %s:%d', $this->cwd, $server->host, $server->port));
+        $this->log(
+            \sprintf('Swoole HTTP server manager in %s at %s:%d', $this->cwd, $httpServer->host, $httpServer->port)
+        );
     }
 
     /**
      * On worker start callback.
      *
-     * @param SwooleServer $server
-     * @param int          $workerId
+     * @param SwooleHttpServer $httpServer
+     * @param int              $workerId
      */
-    public function onWorkerStart(SwooleServer $server, int $workerId): void
+    public function onWorkerStart(SwooleHttpServer $httpServer, int $workerId): void
     {
         $this->setProcessName(
-            \sprintf('%s-%s-%s', $this->processName, $server->taskworker ? 'task' : 'worker', $workerId)
+            \sprintf('%s-%s-%s', $this->processName, $httpServer->taskworker ? 'task' : 'worker', $workerId)
         );
 
-        if ($this->reloader !== null && $workerId === 0) {
-            $this->reloader->register($server);
+        if ($workerId === 0 && $this->reloader !== null) {
+            $this->reloader->register($httpServer);
         }
 
         $this->log(\sprintf(
-            'Swoole %s with ID "%s" started in %s, for server running at %s:%d',
-            $server->taskworker ? 'task' : 'worker',
+            'Swoole server %s with ID %s started in %s, for server running at %s:%d',
+            $httpServer->taskworker ? 'task' : 'worker',
             $workerId,
             $this->cwd,
-            $server->host,
-            $server->port
+            $httpServer->host,
+            $httpServer->port
         ));
     }
 
@@ -212,23 +223,23 @@ class Server
         } catch (\Throwable $exception) {
             // @ignoreException
             $swooleResponse = $this->getExceptionResponse($exception, $swooleResponse);
-        } finally {
-            $swooleResponse->end();
         }
+
+        $swooleResponse->end();
     }
 
     /**
      * On server shutdown callback.
      *
-     * @param SwooleServer $server
+     * @param SwooleHttpServer $httpServer
      */
-    public function onShutdown(SwooleServer $server): void
+    public function onShutdown(SwooleHttpServer $httpServer): void
     {
         if ($this->cwd !== null) {
             \chdir($this->cwd);
         }
 
-        $this->log(\sprintf('Swoole server running at %s:%d has shut down', $server->host, $server->port));
+        $this->log(\sprintf('Swoole server running at %s:%d has shut down', $httpServer->host, $httpServer->port));
     }
 
     /**
