@@ -18,10 +18,14 @@ use Jgut\ServerHandler\Swoole\Http\SwooleResponseFactoryInterface;
 use Jgut\ServerHandler\Swoole\Reloader\ReloaderInterface;
 use Psr\Http\Server\RequestHandlerInterface;
 use Psr\Log\LoggerAwareTrait;
+use Psr\Log\LogLevel;
 use Swoole\Http\Request as SwooleRequest;
 use Swoole\Http\Response as SwooleResponse;
 use Swoole\Http\Server as SwooleHttpServer;
 
+/**
+ * @SuppressWarnings(PHPMD.CouplingBetweenObjects)
+ */
 class Server
 {
     use LoggerAwareTrait;
@@ -146,6 +150,8 @@ class Server
         }
 
         \set_error_handler([$this, 'handleError']);
+        \set_exception_handler([$this, 'handleException']);
+        \register_shutdown_function([$this, 'handleShutdown']);
 
         $this->httpServer->start();
     }
@@ -161,6 +167,7 @@ class Server
         $this->setProcessName($this->processName . '-master-' . $mode);
 
         $this->log(
+            LogLevel::DEBUG,
             \sprintf('Swoole HTTPS server is running in %s at %s:%d', $this->cwd, $httpServer->host, $httpServer->port)
         );
     }
@@ -176,6 +183,7 @@ class Server
         $this->setProcessName($this->processName . '-manager-' . $mode);
 
         $this->log(
+            LogLevel::DEBUG,
             \sprintf('Swoole HTTP server manager in %s at %s:%d', $this->cwd, $httpServer->host, $httpServer->port)
         );
     }
@@ -196,14 +204,17 @@ class Server
             $this->reloader->register($httpServer);
         }
 
-        $this->log(\sprintf(
-            'Swoole server %s with ID %s started in %s, for server running at %s:%d',
-            $httpServer->taskworker ? 'task' : 'worker',
-            $workerId,
-            $this->cwd,
-            $httpServer->host,
-            $httpServer->port
-        ));
+        $this->log(
+            LogLevel::DEBUG,
+            \sprintf(
+                'Swoole server %s with ID %s started in %s, for server running at %s:%d',
+                $httpServer->taskworker ? 'task' : 'worker',
+                $workerId,
+                $this->cwd,
+                $httpServer->host,
+                $httpServer->port
+            )
+        );
     }
 
     /**
@@ -239,7 +250,31 @@ class Server
             \chdir($this->cwd);
         }
 
-        $this->log(\sprintf('Swoole server running at %s:%d has shut down', $httpServer->host, $httpServer->port));
+        $this->log(
+            LogLevel::DEBUG,
+            \sprintf('Swoole server running at %s:%d has shut down', $httpServer->host, $httpServer->port)
+        );
+    }
+
+    /**
+     * @param \Throwable     $exception
+     * @param SwooleResponse $swooleResponse
+     *
+     * @return SwooleResponse
+     */
+    private function getExceptionResponse(\Throwable $exception, SwooleResponse $swooleResponse): SwooleResponse
+    {
+        $swooleResponse->setStatusCode(500);
+
+        $message = 'An unexpected error occurred';
+
+        if ($this->debug) {
+            $message .= "; stack trace:\n\n" . $this->getStackTrace($exception);
+        }
+
+        $swooleResponse->write($message);
+
+        return $swooleResponse;
     }
 
     /**
@@ -265,24 +300,131 @@ class Server
     }
 
     /**
-     * @param \Throwable     $exception
-     * @param SwooleResponse $swooleResponse
+     * Custom exceptions handler.
      *
-     * @return SwooleResponse
+     * @param \Throwable $exception
      */
-    private function getExceptionResponse(\Throwable $exception, SwooleResponse $swooleResponse): SwooleResponse
+    public function handleException(\Throwable $exception): void
     {
-        $swooleResponse->setStatusCode(500);
+        $this->log(
+            LogLevel::ERROR,
+            "An unexpected error occurred; stack trace:\n\n" . $this->getStackTrace($exception)
+        );
+    }
 
-        $message = 'An unexpected error occurred';
+    /**
+     * Custom shutdown handler.
+     *
+     * @SuppressWarnings(PHPMD.ExitExpression)
+     */
+    public function handleShutdown(): void
+    {
+        $error = $this->getLastError();
+        if (\count($error) !== 0 && $this->isFatalError($error['type'])) {
+            $exception = $this->getFatalException($error);
 
-        if ($this->debug) {
-            $message .= "; stack trace:\n\n" . $this->getStackTrace($exception);
+            $this->log(
+                LogLevel::ERROR,
+                "An unexpected error occurred; stack trace:\n\n" . $this->getStackTrace($exception)
+            );
+        }
+    }
+
+    /**
+     * Get last generated error.
+     *
+     * @return mixed[]
+     */
+    protected function getLastError(): array
+    {
+        return \error_get_last() ?? [];
+    }
+
+    /**
+     * Check if error is fatal.
+     *
+     * @param int $error
+     *
+     * @return bool
+     */
+    protected function isFatalError(int $error): bool
+    {
+        $fatalErrors = \E_ERROR
+            | \E_PARSE
+            | \E_CORE_ERROR
+            | \E_CORE_WARNING
+            | \E_COMPILE_ERROR
+            | \E_COMPILE_WARNING
+            | \E_USER_ERROR
+            | \E_STRICT;
+
+        return ($error & $fatalErrors) !== 0;
+    }
+
+    /**
+     * Get exception from fatal error.
+     *
+     * @param mixed[] $error
+     *
+     * @return \Throwable
+     */
+    private function getFatalException(array $error): \Throwable
+    {
+        $message = \explode("\n", $error['message']);
+        $message = $error['type'] . ' - ' . \preg_replace('/ in .+\.php(:\d+)?$/', '', $message[0]);
+
+        $exception = new \RuntimeException($message);
+
+        $trace = $this->getBackTrace();
+        if (\count($trace) !== 0) {
+            $reflection = new \ReflectionProperty(\Exception::class, 'trace');
+            $reflection->setAccessible(true);
+            $reflection->setValue($exception, $trace);
         }
 
-        $swooleResponse->write($message);
+        return $exception;
+    }
 
-        return $swooleResponse;
+    /**
+     * Get execution backtrace.
+     *
+     * @return mixed[]
+     */
+    private function getBackTrace(): array
+    {
+        $trace = [];
+
+        if (\function_exists('xdebug_get_function_stack')) {
+            $trace = \array_map(
+                function (array $frame): array {
+                    if (!isset($frame['type'])) {
+                        // http://bugs.xdebug.org/view.php?id=695
+                        if (isset($frame['class'])) {
+                            $frame['type'] = '::';
+                        }
+                    } elseif ('static' === $frame['type']) {
+                        $frame['type'] = '::';
+                    } elseif ('dynamic' === $frame['type']) {
+                        $frame['type'] = '->';
+                    }
+
+                    if (isset($frame['params'])) {
+                        if (!isset($frame['args'])) {
+                            $frame['args'] = $frame['params'];
+                        }
+
+                        unset($frame['params']);
+                    }
+
+                    return $frame;
+                },
+                \xdebug_get_function_stack()
+            );
+
+            $trace = \array_reverse(\array_slice($trace, 0, -3));
+        }
+
+        return $trace;
     }
 
     /**
@@ -333,12 +475,13 @@ TRACE;
     /**
      * Log message.
      *
+     * @param string $logger
      * @param string $message
      */
-    private function log(string $message): void
+    private function log(string $logger, string $message): void
     {
         if ($this->logger !== null) {
-            $this->logger->debug($message);
+            $this->logger->log($logger, $message);
         }
     }
 }
