@@ -328,8 +328,8 @@ final class PsrRequestFactory implements PsrRequestFactoryInterface
         array $tmpNameTree,
         array $sizeTree,
         array $errorTree,
-        array $nameTree = null,
-        array $typeTree = null
+        ?array $nameTree = null,
+        ?array $typeTree = null
     ): array {
         $uploadedFiles = [];
         foreach ($tmpNameTree as $key => $value) {

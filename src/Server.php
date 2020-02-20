@@ -290,7 +290,7 @@ class Server
      *
      * @return bool
      */
-    public function handleError(int $severity, string $message, string $file = null, int $line = null): bool
+    public function handleError(int $severity, string $message, ?string $file = null, ?int $line = null): bool
     {
         if ((\error_reporting() & $severity) !== 0) {
             throw new \ErrorException($message, $severity, $severity, $file, $line);
