@@ -24,7 +24,7 @@
   "prefer-stable": true,
   "require": {
     "php": "^7.1",
-    "ext-swoole": "*",
+    "ext-swoole": "^4.4.6",
     "dflydev/fig-cookies": "^1.0|^2.0",
     "psr/http-factory": "^1.0",
     "psr/http-server-handler": "^1.0",
